@@ -10,15 +10,18 @@ const path = require("path");
 const url = require("url");
 const os = require("os");
 const { createClient } = require("@supabase/supabase-js");
+const dotenv = require("dotenv");
+
+// Load environment variables from .env file
+dotenv.config();
 
 // For Windows auto-start functionality
 const { execSync } = require("child_process");
 const fs = require("fs");
 
 // Supabase configuration
-const SUPABASE_URL = "https://cecxwuddkezuvjfqriwm.supabase.co";
-const SUPABASE_KEY =
-	"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlY3h3dWRka2V6dXZqZnFyaXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYwMDgxNDgsImV4cCI6MjA2MTU4NDE0OH0._cYVO7QoNn7vZXLuCE1yZPPSwFD1hxHyJINYfBUuZzY";
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
 // App name for registry
 const APP_NAME = "CafeKioskLock";

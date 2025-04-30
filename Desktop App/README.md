@@ -18,12 +18,29 @@ This Electron.js application serves as a kiosk-style lock screen for PCs.
 ## Installation
 
 ```bash
+# Clone the repository
+git clone <repository-url>
+cd <repository-name>/Desktop\ App
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env file with your Supabase credentials
+
 # Install dependencies
 npm install
 
 # Package the application for Windows
 npm run dist
 ```
+
+## Environment Variables
+
+This application uses environment variables to store sensitive information like API keys. Before running the application:
+
+1. Copy the `.env.example` file to a new file named `.env`
+2. Replace the placeholder values with your actual Supabase credentials
+
+**Note:** The `.env` file contains sensitive information and should never be committed to version control.
 
 ## Usage
 
