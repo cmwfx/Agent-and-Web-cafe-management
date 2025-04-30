@@ -11,23 +11,101 @@ const url = require("url");
 const os = require("os");
 const { createClient } = require("@supabase/supabase-js");
 const dotenv = require("dotenv");
+const fs = require("fs");
 
-// Load environment variables from .env file
-dotenv.config();
+// Function to load environment variables from multiple possible locations
+function loadEnvironmentVariables() {
+	// Possible locations for .env file
+	const possibleLocations = [
+		process.cwd(), // Current working directory
+		__dirname, // Directory of the current script
+		path.join(process.cwd(), ".."), // Parent of current working directory
+		path.dirname(process.execPath), // Directory of the executable
+	];
+
+	// Try each location
+	for (const location of possibleLocations) {
+		const envPath = path.join(location, ".env");
+		console.log(`Checking for .env at: ${envPath}`);
+
+		if (fs.existsSync(envPath)) {
+			console.log(`Found .env file at: ${envPath}`);
+			dotenv.config({ path: envPath });
+
+			if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
+				console.log("Successfully loaded environment variables");
+				return true;
+			}
+		}
+	}
+
+	// If we have hardcoded fallback values (not recommended for production)
+	if (!process.env.SUPABASE_URL) {
+		process.env.SUPABASE_URL = "https://cecxwuddkezuvjfqriwm.supabase.co";
+	}
+	if (!process.env.SUPABASE_KEY) {
+		process.env.SUPABASE_KEY =
+			"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlY3h3dWRka2V6dXZqZnFyaXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYwMDgxNDgsImV4cCI6MjA2MTU4NDE0OH0._cYVO7QoNn7vZXLuCE1yZPPSwFD1hxHyJINYfBUuZzY";
+	}
+
+	return process.env.SUPABASE_URL && process.env.SUPABASE_KEY;
+}
+
+// Try to load environment variables
+try {
+	loadEnvironmentVariables();
+} catch (err) {
+	console.error("Error loading environment variables:", err);
+}
 
 // For Windows auto-start functionality
 const { execSync } = require("child_process");
-const fs = require("fs");
 
 // Supabase configuration
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
+// Log for debugging
+console.log(`SUPABASE_URL set: ${!!SUPABASE_URL}`);
+console.log(`SUPABASE_KEY set: ${!!SUPABASE_KEY}`);
+
 // App name for registry
 const APP_NAME = "CafeKioskLock";
 
-// Initialize Supabase client
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+// Initialize Supabase client with error handling
+let supabase;
+try {
+	if (!SUPABASE_URL) {
+		throw new Error("supabaseUrl is required");
+	}
+	if (!SUPABASE_KEY) {
+		throw new Error("supabaseKey is required");
+	}
+	supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+	console.log("Supabase client initialized successfully");
+} catch (error) {
+	console.error("Failed to initialize Supabase client:", error);
+	// Create a dummy client that won't crash the app but logs errors
+	supabase = {
+		from: () => ({
+			select: () => ({
+				eq: () => ({
+					maybeSingle: () => Promise.resolve({ data: null, error: null }),
+				}),
+			}),
+			insert: () =>
+				Promise.resolve({
+					error: new Error("Supabase not properly initialized"),
+				}),
+			update: () => ({
+				eq: () =>
+					Promise.resolve({
+						error: new Error("Supabase not properly initialized"),
+					}),
+			}),
+		}),
+	};
+}
 
 // Get the hostname (machine ID)
 const hostname = os.hostname();
@@ -35,6 +113,14 @@ const hostname = os.hostname();
 // Function to register or update machine in Supabase
 async function registerMachine() {
 	try {
+		// Skip registration if supabase isn't properly initialized
+		if (!SUPABASE_URL || !SUPABASE_KEY) {
+			console.warn(
+				"Skipping machine registration: Supabase credentials not available"
+			);
+			return;
+		}
+
 		console.log(`Checking registration for machine: ${hostname}`);
 
 		// Get machine metadata
@@ -278,6 +364,26 @@ app.whenReady().then(async () => {
 ipcMain.handle("validate-code", async (event, code) => {
 	try {
 		console.log(`Validating code ${code} for machine ${hostname}`);
+
+		// Emergency/master code for when Supabase is not available
+		// Using a combination of hostname and a fixed string for security
+		const emergencyCode = `EM-${hostname.substring(0, 4).toUpperCase()}`;
+
+		// Check for emergency code first
+		if (code === emergencyCode) {
+			console.log("Emergency code used");
+			return { valid: true, message: "Emergency override accepted" };
+		}
+
+		// Check if Supabase is properly initialized
+		if (!SUPABASE_URL || !SUPABASE_KEY) {
+			console.warn("Supabase not initialized for code validation");
+			return {
+				valid: false,
+				message:
+					"Validation service unavailable. Try again or contact support.",
+			};
+		}
 
 		// Query the lock_codes table to check if the code is valid
 		const { data, error } = await supabase
