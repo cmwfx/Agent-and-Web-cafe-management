@@ -144,6 +144,11 @@
     <div class="spinner" id="loadingSpinner"></div>
     <div class="error-message" id="errorMessage"></div>
     <div class="success-message" id="successMessage"></div>
+
+    <!-- Debug Info Display -->
+    <div id="debugInfo"
+      style="margin-top: 20px; text-align: left; color: #aaa; font-size: 12px; padding: 10px; background-color: rgba(0,0,0,0.3); border-radius: 4px; max-height: 150px; overflow-y: auto;">
+    </div>
   </div>
 
   <script>
@@ -156,9 +161,14 @@
       const errorMessage = document.getElementById( 'errorMessage' );
       const successMessage = document.getElementById( 'successMessage' );
       const loadingSpinner = document.getElementById( 'loadingSpinner' );
+      const debugInfo = document.getElementById( 'debugInfo' );
 
       // Display hostname
-      hostnameEl.textContent = `Computer ID: ${ await window.api.getHostname() }`;
+      const hostname = await window.api.getHostname();
+      hostnameEl.textContent = `Computer ID: ${ hostname }`;
+
+      // Debug info
+      debugInfo.innerHTML = `<strong>Debug Info:</strong><br>Hostname: ${ hostname }`;
 
       // Focus the input field
       codeInput.focus();
@@ -188,8 +198,14 @@
         setLoading( true );
 
         try {
+          // Add to debug info
+          addDebugInfo( `Attempting to validate code: ${ code }` );
+
           // Call the validate code function from the preload script
           const result = await window.api.validateCode( code );
+
+          // Add validation result to debug info
+          addDebugInfo( `Validation result: ${ JSON.stringify( result ) }` );
 
           if ( result.valid ) {
             // Code is valid
@@ -206,6 +222,7 @@
             codeInput.focus();
           }
         } catch ( error ) {
+          addDebugInfo( `Error: ${ error.message || 'Unknown error' }` );
           showError( 'An error occurred. Please try again.' );
         } finally {
           setLoading( false );
@@ -229,6 +246,13 @@
         unlockBtn.disabled = isLoading;
         codeInput.disabled = isLoading;
         loadingSpinner.style.display = isLoading ? 'block' : 'none';
+      }
+
+      // Add debug info
+      function addDebugInfo ( message ) {
+        const timestamp = new Date().toLocaleTimeString();
+        debugInfo.innerHTML += `<br>[${ timestamp }] ${ message }`;
+        debugInfo.scrollTop = debugInfo.scrollHeight;
       }
     } );
 

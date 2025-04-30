@@ -4,6 +4,9 @@
 const { contextBridge, ipcRenderer } = require("electron");
 const os = require("os");
 
+// Debug: Log the exact hostname
+console.log("Hostname is:", os.hostname());
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld("api", {

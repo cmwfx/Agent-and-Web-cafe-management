@@ -364,6 +364,9 @@ app.whenReady().then(async () => {
 ipcMain.handle("validate-code", async (event, code) => {
 	try {
 		console.log(`Validating code ${code} for machine ${hostname}`);
+		console.log(
+			`DEBUG - Hostname type: ${typeof hostname}, value: "${hostname}"`
+		);
 
 		// Emergency/master code for when Supabase is not available
 		// Using a combination of hostname and a fixed string for security
@@ -385,6 +388,13 @@ ipcMain.handle("validate-code", async (event, code) => {
 			};
 		}
 
+		// DEBUG: Show Supabase query parameters
+		console.log("DEBUG - Query parameters:", {
+			code: code,
+			machine_id: hostname,
+			currentTime: new Date().toISOString(),
+		});
+
 		// Query the lock_codes table to check if the code is valid
 		const { data, error } = await supabase
 			.from("lock_codes")
@@ -393,8 +403,10 @@ ipcMain.handle("validate-code", async (event, code) => {
 			.eq("machine_id", hostname)
 			.eq("used", false)
 			.gt("expires_at", new Date().toISOString())
-			.limit(1)
-			.single();
+			.limit(1);
+
+		// DEBUG: Log the raw response
+		console.log("DEBUG - Supabase response:", { data, error });
 
 		if (error) {
 			console.error("Supabase query error:", error);
@@ -404,17 +416,17 @@ ipcMain.handle("validate-code", async (event, code) => {
 			};
 		}
 
-		if (!data) {
+		if (!data || data.length === 0) {
 			return { valid: false, message: "Invalid or expired code." };
 		}
 
-		console.log("Valid code found:", data);
+		console.log("Valid code found:", data[0]);
 
 		// Mark the code as used
 		const { error: updateError } = await supabase
 			.from("lock_codes")
 			.update({ used: true })
-			.eq("id", data.id);
+			.eq("id", data[0].id);
 
 		if (updateError) {
 			console.error("Error marking code as used:", updateError);
