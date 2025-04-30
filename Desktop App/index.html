@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,59 +11,269 @@
       padding: 0;
       width: 100vw;
       height: 100vh;
-      background-color: #000;
+      background-color: #121212;
       color: #fff;
       display: flex;
       justify-content: center;
       align-items: center;
-      font-family: Arial, sans-serif;
+      font-family: 'Segoe UI', Arial, sans-serif;
       overflow: hidden;
       user-select: none;
-      cursor: none;
     }
+
     .lock-container {
       text-align: center;
+      width: 100%;
+      max-width: 500px;
+      padding: 2rem;
+      border-radius: 16px;
+      background-color: rgba(30, 30, 30, 0.6);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
     }
+
     .lock-icon {
       font-size: 80px;
       margin-bottom: 20px;
     }
+
     .lock-message {
-      font-size: 32px;
+      font-size: 28px;
       font-weight: bold;
+      margin-bottom: 30px;
+    }
+
+    .hostname {
+      font-size: 16px;
+      color: #aaa;
+      margin-bottom: 30px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .code-input {
+      width: 100%;
+      max-width: 300px;
+      margin: 0 auto;
+      padding: 12px 16px;
+      font-size: 20px;
+      background-color: rgba(255, 255, 255, 0.1);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      color: white;
+      text-align: center;
+      letter-spacing: 2px;
+      box-sizing: border-box;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+
+    .code-input:focus {
+      border-color: #2196F3;
+    }
+
+    .unlock-btn {
+      background-color: #2196F3;
+      color: white;
+      font-size: 18px;
+      font-weight: bold;
+      padding: 12px 30px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: background-color 0.3s;
+    }
+
+    .unlock-btn:hover {
+      background-color: #0d8aee;
+    }
+
+    .error-message {
+      color: #ff5252;
+      font-size: 16px;
+      margin-top: 20px;
+      min-height: 20px;
+    }
+
+    .success-message {
+      color: #4caf50;
+      font-size: 16px;
+      margin-top: 20px;
+      min-height: 20px;
+    }
+
+    /* Loading spinner */
+    .spinner {
+      display: none;
+      margin: 20px auto;
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top: 4px solid #2196F3;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
     }
   </style>
 </head>
+
 <body>
   <div class="lock-container">
     <div class="lock-icon">🔒</div>
     <div class="lock-message">This computer is locked</div>
+    <div class="hostname" id="hostname"></div>
+
+    <div class="form-group">
+      <input type="text" id="codeInput" class="code-input" placeholder="Enter unlock code" maxlength="8"
+        autocomplete="off">
+    </div>
+
+    <button id="unlockBtn" class="unlock-btn">Unlock</button>
+
+    <div class="spinner" id="loadingSpinner"></div>
+    <div class="error-message" id="errorMessage"></div>
+    <div class="success-message" id="successMessage"></div>
   </div>
 
   <script>
+    // Wait for DOM to be ready
+    document.addEventListener( 'DOMContentLoaded', async () => {
+      // Get elements
+      const hostnameEl = document.getElementById( 'hostname' );
+      const codeInput = document.getElementById( 'codeInput' );
+      const unlockBtn = document.getElementById( 'unlockBtn' );
+      const errorMessage = document.getElementById( 'errorMessage' );
+      const successMessage = document.getElementById( 'successMessage' );
+      const loadingSpinner = document.getElementById( 'loadingSpinner' );
+
+      // Display hostname
+      hostnameEl.textContent = `Computer ID: ${ await window.api.getHostname() }`;
+
+      // Focus the input field
+      codeInput.focus();
+
+      // Handle unlock button click
+      unlockBtn.addEventListener( 'click', async () => {
+        await validateCode();
+      } );
+
+      // Handle enter key press
+      codeInput.addEventListener( 'keypress', async ( e ) => {
+        if ( e.key === 'Enter' ) {
+          await validateCode();
+        }
+      } );
+
+      // Function to validate the code
+      async function validateCode () {
+        const code = codeInput.value.trim();
+
+        if ( !code ) {
+          showError( 'Please enter an unlock code' );
+          return;
+        }
+
+        // Show loading state
+        setLoading( true );
+
+        try {
+          // Call the validate code function from the preload script
+          const result = await window.api.validateCode( code );
+
+          if ( result.valid ) {
+            // Code is valid
+            showSuccess( result.message );
+
+            // Wait a moment to show the success message before exiting
+            setTimeout( () => {
+              window.api.exitApp();
+            }, 1500 );
+          } else {
+            // Code is invalid
+            showError( result.message );
+            codeInput.value = '';
+            codeInput.focus();
+          }
+        } catch ( error ) {
+          showError( 'An error occurred. Please try again.' );
+        } finally {
+          setLoading( false );
+        }
+      }
+
+      // Show error message
+      function showError ( message ) {
+        errorMessage.textContent = message;
+        successMessage.textContent = '';
+      }
+
+      // Show success message
+      function showSuccess ( message ) {
+        successMessage.textContent = message;
+        errorMessage.textContent = '';
+      }
+
+      // Set loading state
+      function setLoading ( isLoading ) {
+        unlockBtn.disabled = isLoading;
+        codeInput.disabled = isLoading;
+        loadingSpinner.style.display = isLoading ? 'block' : 'none';
+      }
+    } );
+
     // Prevent right-click context menu
-    document.addEventListener('contextmenu', (e) => {
+    document.addEventListener( 'contextmenu', ( e ) => {
       e.preventDefault();
       return false;
-    });
+    } );
 
-    // Prevent keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-      e.preventDefault();
-      return false;
-    });
+    // Block some keyboard shortcuts but allow typing in the input field
+    document.addEventListener( 'keydown', ( e ) => {
+      // Allow normal typing and navigation in the input field
+      if ( e.target.tagName === 'INPUT' ) {
+        // Only prevent certain key combinations
+        if (
+          ( e.ctrlKey && [ 'w', 'r', 'q' ].includes( e.key.toLowerCase() ) ) ||
+          ( e.altKey && e.key === 'F4' ) ||
+          e.key === 'F11' ||
+          e.key === 'Escape'
+        ) {
+          e.preventDefault();
+          return false;
+        }
+        return true;
+      }
 
-    // Prevent selecting text
-    document.addEventListener('selectstart', (e) => {
+      // Block all keys outside of the input field
       e.preventDefault();
       return false;
-    });
+    } );
+
+    // Prevent selecting text except in input
+    document.addEventListener( 'selectstart', ( e ) => {
+      if ( e.target.tagName !== 'INPUT' ) {
+        e.preventDefault();
+        return false;
+      }
+    } );
 
     // Prevent dragging
-    document.addEventListener('dragstart', (e) => {
+    document.addEventListener( 'dragstart', ( e ) => {
       e.preventDefault();
       return false;
-    });
+    } );
   </script>
 </body>
-</html> 
+
+</html>

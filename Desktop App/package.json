@@ -13,5 +13,8 @@
 	"description": "A kiosk-style lock screen application",
 	"devDependencies": {
 		"electron": "^36.0.0"
+	},
+	"dependencies": {
+		"@supabase/supabase-js": "^2.49.4"
 	}
 }
