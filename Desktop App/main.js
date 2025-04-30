@@ -296,21 +296,44 @@ function createWindow() {
 		alwaysOnTop: true,
 		skipTaskbar: true,
 		webPreferences: {
-			nodeIntegration: false,
+			nodeIntegration: true, // Enable Node integration for testing
 			contextIsolation: true,
 			enableRemoteModule: false,
 			preload: path.join(__dirname, "preload.js"),
+			sandbox: false, // Disable sandbox for testing
 		},
 	});
 
 	// Load the index.html file
+	const indexPath = path.join(__dirname, "index.html");
+	console.log(`Loading HTML from: ${indexPath}`);
+
 	mainWindow.loadURL(
 		url.format({
-			pathname: path.join(__dirname, "index.html"),
+			pathname: indexPath,
 			protocol: "file:",
 			slashes: true,
 		})
 	);
+
+	// For debugging purposes - open DevTools in development
+	if (!app.isPackaged) {
+		mainWindow.webContents.openDevTools();
+		console.log("DevTools opened for debugging");
+	}
+
+	// Debug info for preload script
+	console.log(`Preload script path: ${path.join(__dirname, "preload.js")}`);
+	console.log(
+		`Preload script exists: ${fs.existsSync(
+			path.join(__dirname, "preload.js")
+		)}`
+	);
+
+	// Log when preload script is loaded
+	mainWindow.webContents.on("did-finish-load", () => {
+		console.log("Main window finished loading");
+	});
 
 	// Prevent the window from being closed
 	mainWindow.on("close", (event) => {

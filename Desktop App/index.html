@@ -201,6 +201,52 @@
         }
       }
 
+      // Direct Supabase validation (backup method)
+      async function directSupabaseValidation ( code ) {
+        debug( `Using direct Supabase validation for code: ${ code }` );
+
+        try {
+          // Using fetch to directly call Supabase API
+          const response = await fetch( "https://cecxwuddkezuvjfqriwm.supabase.co/rest/v1/lock_codes?select=*&code=eq." + code + "&machine_id=eq.EC2AMAZ-21ASGA3&used=eq.false", {
+            method: "GET",
+            headers: {
+              "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlY3h3dWRka2V6dXZqZnFyaXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYwMDgxNDgsImV4cCI6MjA2MTU4NDE0OH0._cYVO7QoNn7vZXLuCE1yZPPSwFD1hxHyJINYfBUuZzY",
+              "Content-Type": "application/json"
+            }
+          } );
+
+          const data = await response.json();
+          debug( `Direct Supabase response: ${ JSON.stringify( data ) }` );
+
+          if ( data && data.length > 0 ) {
+            // Found a valid code, now mark it as used
+            const codeId = data[ 0 ].id;
+            debug( `Valid code found with ID: ${ codeId }` );
+
+            // Mark as used
+            const updateResponse = await fetch( `https://cecxwuddkezuvjfqriwm.supabase.co/rest/v1/lock_codes?id=eq.${ codeId }`, {
+              method: "PATCH",
+              headers: {
+                "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlY3h3dWRka2V6dXZqZnFyaXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYwMDgxNDgsImV4cCI6MjA2MTU4NDE0OH0._cYVO7QoNn7vZXLuCE1yZPPSwFD1hxHyJINYfBUuZzY",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal"
+              },
+              body: JSON.stringify( {
+                used: true
+              } )
+            } );
+
+            debug( `Update response status: ${ updateResponse.status }` );
+            return { valid: true, message: "Unlocking..." };
+          }
+
+          return { valid: false, message: "Invalid or expired code." };
+        } catch ( err ) {
+          debug( `Direct Supabase validation error: ${ err.message }` );
+          return { valid: false, message: "Error validating code" };
+        }
+      }
+
       // Display initial debug info
       try {
         debug( `<strong>App Started</strong>` );
@@ -208,6 +254,7 @@
         // Check if window.api exists
         if ( !window.api ) {
           debug( `❌ ERROR: window.api is undefined. The preload script may not be working properly.` );
+          debug( `Will use direct Supabase validation as fallback.` );
           hostnameEl.textContent = `Computer ID: EC2AMAZ-21ASGA3 (Fallback)`;
         } else {
           try {
@@ -261,12 +308,18 @@
         try {
           debug( `Attempting to validate code: "${ code }"` );
 
-          // Normal path - validate through API
-          if ( !window.api || !window.api.validateCode ) {
-            throw new Error( "Validation API not available" );
+          let result;
+
+          // Try using the API from preload first
+          if ( window.api && window.api.validateCode ) {
+            debug( `Using API from preload script` );
+            result = await window.api.validateCode( code );
+          } else {
+            // Fall back to direct validation
+            debug( `API not available, using direct Supabase validation` );
+            result = await directSupabaseValidation( code );
           }
 
-          const result = await window.api.validateCode( code );
           debug( `Validation result: ${ JSON.stringify( result ) }` );
 
           if ( result.valid ) {

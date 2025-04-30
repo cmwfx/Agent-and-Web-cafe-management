@@ -4,6 +4,8 @@
 const { contextBridge, ipcRenderer } = require("electron");
 const os = require("os");
 
+console.log("Preload script executing...");
+
 // Get hostname with fallback
 let hostname;
 try {
@@ -33,50 +35,79 @@ try {
 	hostname = "EC2AMAZ-21ASGA3"; // Fallback to expected ID
 }
 
-// Expose protected methods that allow the renderer process to use
-// the ipcRenderer without exposing the entire object
+// Define API object first
+const validationApi = {
+	// Get the hostname (machine ID)
+	getHostname: () => {
+		try {
+			return hostname || "EC2AMAZ-21ASGA3";
+		} catch (err) {
+			console.error("Error in getHostname:", err);
+			return "EC2AMAZ-21ASGA3"; // Fallback value
+		}
+	},
+
+	// Send validation request to main process
+	validateCode: (code) => {
+		try {
+			// Always validate through Supabase - no hardcoded values
+			return ipcRenderer.invoke("validate-code", code);
+		} catch (err) {
+			console.error("Error in validateCode:", err);
+			return Promise.reject(err);
+		}
+	},
+
+	// Exit/hide the application when a valid code is provided
+	exitApp: () => {
+		try {
+			return ipcRenderer.send("exit-app");
+		} catch (err) {
+			console.error("Error in exitApp:", err);
+			// Try to close directly as fallback
+			window.close();
+		}
+	},
+};
+
+// Use multiple ways to expose the API
 try {
-	contextBridge.exposeInMainWorld("api", {
-		// Get the hostname (machine ID)
-		getHostname: () => {
-			try {
-				return hostname || "EC2AMAZ-21ASGA3";
-			} catch (err) {
-				console.error("Error in getHostname:", err);
-				return "EC2AMAZ-21ASGA3"; // Fallback value
-			}
-		},
-
-		// Send validation request to main process
-		validateCode: (code) => {
-			try {
-				// Always validate through Supabase - no hardcoded values
-				return ipcRenderer.invoke("validate-code", code);
-			} catch (err) {
-				console.error("Error in validateCode:", err);
-				return Promise.reject(err);
-			}
-		},
-
-		// Exit/hide the application when a valid code is provided
-		exitApp: () => {
-			try {
-				return ipcRenderer.send("exit-app");
-			} catch (err) {
-				console.error("Error in exitApp:", err);
-				// Try to close directly as fallback
-				window.close();
-			}
-		},
-	});
-
-	console.log("API successfully exposed to renderer");
+	// Method 1: contextBridge
+	if (contextBridge) {
+		console.log("Using contextBridge to expose API...");
+		contextBridge.exposeInMainWorld("api", validationApi);
+		console.log("API exposed via contextBridge");
+	}
+	// Method 2: direct attachment (fallback if contextBridge fails)
+	else {
+		console.log("ContextBridge not available, using direct attachment...");
+		window.api = validationApi;
+		console.log("API exposed via direct attachment");
+	}
 } catch (err) {
-	console.error("Failed to expose API to renderer:", err);
+	console.error("Failed to expose API:", err);
+
+	// Method 3: Try alternative approach for exposing API
+	try {
+		console.log("Attempting alternative API exposure method...");
+		window.api = validationApi;
+		console.log("API exposed via window.api direct assignment");
+	} catch (innerErr) {
+		console.error("All API exposure methods failed:", innerErr);
+	}
 }
 
+// Verify API is properly set
 window.addEventListener("DOMContentLoaded", () => {
-	// We're not passing any functions to the renderer in this simple version
-	// If future functionality requires communication with the main process,
-	// we can expose specific functionality here via contextBridge
+	console.log("DOM content loaded in preload script");
+	try {
+		// Check if API was successfully exposed
+		if (window.api) {
+			console.log("API successfully available in renderer");
+		} else {
+			console.error("API not available in renderer after DOMContentLoaded");
+		}
+	} catch (err) {
+		console.error("Error verifying API in DOMContentLoaded:", err);
+	}
 });
