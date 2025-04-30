@@ -462,42 +462,85 @@ ipcMain.handle("validate-code", async (event, code) => {
 		try {
 			console.log(`Updating code ${foundCode.id} to mark as used...`);
 
-			const updateResult = await supabase
-				.from("lock_codes")
-				.update({ used: true })
-				.eq("id", foundCode.id);
+			// Try a more direct approach first - using RPC if available
+			const updateResult = await fetch(
+				`${SUPABASE_URL}/rest/v1/rpc/mark_code_as_used`,
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						apikey: SUPABASE_KEY,
+						Authorization: `Bearer ${SUPABASE_KEY}`,
+						Prefer: "return=minimal",
+					},
+					body: JSON.stringify({
+						code_id: foundCode.id,
+					}),
+				}
+			).catch((err) => {
+				console.error("RPC update failed:", err);
+				return { ok: false };
+			});
 
-			console.log("DEBUG - Update result:", updateResult);
+			if (!updateResult.ok) {
+				console.log(
+					"RPC update failed or not available, trying direct update..."
+				);
 
-			if (updateResult.error) {
-				console.error("Error marking code as used:", updateResult.error);
-				// Try an alternative update method
-				try {
-					console.log("Trying alternative update method...");
-					const altUpdateResult = await supabase
-						.from("lock_codes")
-						.update([{ used: true }])
-						.match({ id: foundCode.id });
-
-					console.log("Alternative update result:", altUpdateResult);
-
-					if (!altUpdateResult.error) {
-						console.log(
-							"Successfully marked code as used with alternative method"
-						);
+				// Try direct PATCH with explicit Content-Type
+				const directUpdate = await fetch(
+					`${SUPABASE_URL}/rest/v1/lock_codes?id=eq.${foundCode.id}`,
+					{
+						method: "PATCH",
+						headers: {
+							"Content-Type": "application/json",
+							apikey: SUPABASE_KEY,
+							Authorization: `Bearer ${SUPABASE_KEY}`,
+							Prefer: "return=minimal",
+						},
+						body: JSON.stringify({
+							used: true,
+						}),
 					}
-				} catch (altErr) {
-					console.error("Alternative update also failed:", altErr);
+				);
+
+				console.log(`Direct update status: ${directUpdate.status}`);
+
+				if (!directUpdate.ok) {
+					// Last resort, try a POST to the table with conflict handling
+					console.log("Trying upsert approach...");
+					const upsertUpdate = await fetch(
+						`${SUPABASE_URL}/rest/v1/lock_codes`,
+						{
+							method: "POST",
+							headers: {
+								"Content-Type": "application/json",
+								apikey: SUPABASE_KEY,
+								Authorization: `Bearer ${SUPABASE_KEY}`,
+								Prefer: "resolution=merge-duplicates",
+							},
+							body: JSON.stringify({
+								id: foundCode.id,
+								code: foundCode.code,
+								machine_id: foundCode.machine_id,
+								expires_at: foundCode.expires_at,
+								used: true,
+							}),
+						}
+					);
+
+					console.log(`Upsert update status: ${upsertUpdate.status}`);
 				}
 			} else {
-				console.log("Successfully marked code as used");
+				console.log("Successfully marked code as used via RPC");
 			}
+
+			return { valid: true, message: "Unlocking..." };
 		} catch (updateErr) {
 			console.error("Exception in update operation:", updateErr);
 			// Continue anyway - we'll still unlock even if the update fails
+			return { valid: true, message: "Unlocking..." };
 		}
-
-		return { valid: true, message: "Unlocking..." };
 	} catch (err) {
 		console.error("Validation error:", err);
 		return { valid: false, message: "An error occurred. Please try again." };

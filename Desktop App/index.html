@@ -224,34 +224,8 @@
             const codeId = data[ 0 ].id;
             debug( `Valid code found with ID: ${ codeId }` );
 
-            // Mark as used - using Supabase REST API
-            try {
-              const updateUrl = `https://cecxwuddkezuvjfqriwm.supabase.co/rest/v1/lock_codes?id=eq.${ codeId }`;
-              debug( `Sending update request to: ${ updateUrl }` );
-
-              const updateResponse = await fetch( updateUrl, {
-                method: "PATCH",
-                headers: {
-                  "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlY3h3dWRka2V6dXZqZnFyaXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYwMDgxNDgsImV4cCI6MjA2MTU4NDE0OH0._cYVO7QoNn7vZXLuCE1yZPPSwFD1hxHyJINYfBUuZzY",
-                  "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlY3h3dWRka2V6dXZqZnFyaXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYwMDgxNDgsImV4cCI6MjA2MTU4NDE0OH0._cYVO7QoNn7vZXLuCE1yZPPSwFD1hxHyJINYfBUuZzY",
-                  "Content-Type": "application/json",
-                  "Prefer": "return=minimal"
-                },
-                body: JSON.stringify( {
-                  used: true
-                } )
-              } );
-
-              if ( updateResponse.ok ) {
-                debug( `✅ Successfully marked code as used. Status: ${ updateResponse.status }` );
-              } else {
-                const errorData = await updateResponse.text();
-                debug( `❌ Error marking code as used. Status: ${ updateResponse.status }, Response: ${ errorData }` );
-              }
-            } catch ( updateErr ) {
-              debug( `❌ Exception updating code status: ${ updateErr.message }` );
-              // Continue with unlocking even if the update fails
-            }
+            // Try all possible methods to update the record
+            await updateCodeAsUsed( codeId, data[ 0 ] );
 
             return { valid: true, message: "Unlocking..." };
           }
@@ -260,6 +234,127 @@
         } catch ( err ) {
           debug( `Direct Supabase validation error: ${ err.message }` );
           return { valid: false, message: "Error validating code" };
+        }
+      }
+
+      // Helper function to try multiple methods to update the code
+      async function updateCodeAsUsed ( codeId, codeData ) {
+        const SUPABASE_URL = "https://cecxwuddkezuvjfqriwm.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlY3h3dWRka2V6dXZqZnFyaXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYwMDgxNDgsImV4cCI6MjA2MTU4NDE0OH0._cYVO7QoNn7vZXLuCE1yZPPSwFD1hxHyJINYfBUuZzY";
+
+        try {
+          // Method 1: Try RPC first (if available)
+          debug( `Trying RPC method to update code ${ codeId }...` );
+          try {
+            const rpcResponse = await fetch( `${ SUPABASE_URL }/rest/v1/rpc/mark_code_as_used`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${ SUPABASE_KEY }`,
+                'Prefer': 'return=minimal'
+              },
+              body: JSON.stringify( {
+                code_id: codeId
+              } )
+            } );
+
+            if ( rpcResponse.ok ) {
+              debug( `✅ Success: RPC method updated code as used (${ rpcResponse.status })` );
+              return;
+            } else {
+              debug( `RPC update failed with status ${ rpcResponse.status }` );
+            }
+          } catch ( rpcErr ) {
+            debug( `RPC error: ${ rpcErr.message }` );
+          }
+
+          // Method 2: Try direct PATCH to the record
+          debug( `Trying direct PATCH update method...` );
+          try {
+            const patchResponse = await fetch( `${ SUPABASE_URL }/rest/v1/lock_codes?id=eq.${ codeId }`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${ SUPABASE_KEY }`,
+                'Prefer': 'return=minimal'
+              },
+              body: JSON.stringify( {
+                used: true
+              } )
+            } );
+
+            if ( patchResponse.ok ) {
+              debug( `✅ Success: PATCH method updated code as used (${ patchResponse.status })` );
+              return;
+            } else {
+              debug( `PATCH update failed with status ${ patchResponse.status }` );
+            }
+          } catch ( patchErr ) {
+            debug( `PATCH error: ${ patchErr.message }` );
+          }
+
+          // Method 3: Try PUT - full replacement
+          debug( `Trying PUT update method...` );
+          try {
+            const putResponse = await fetch( `${ SUPABASE_URL }/rest/v1/lock_codes?id=eq.${ codeId }`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${ SUPABASE_KEY }`,
+                'Prefer': 'return=minimal'
+              },
+              body: JSON.stringify( {
+                ...codeData,
+                used: true
+              } )
+            } );
+
+            if ( putResponse.ok ) {
+              debug( `✅ Success: PUT method updated code as used (${ putResponse.status })` );
+              return;
+            } else {
+              debug( `PUT update failed with status ${ putResponse.status }` );
+            }
+          } catch ( putErr ) {
+            debug( `PUT error: ${ putErr.message }` );
+          }
+
+          // Method 4: Last resort - POST with conflict resolution
+          debug( `Trying POST with conflict resolution...` );
+          try {
+            const postResponse = await fetch( `${ SUPABASE_URL }/rest/v1/lock_codes`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${ SUPABASE_KEY }`,
+                'Prefer': 'resolution=merge-duplicates'
+              },
+              body: JSON.stringify( {
+                id: codeData.id,
+                code: codeData.code,
+                machine_id: codeData.machine_id,
+                expires_at: codeData.expires_at,
+                used: true
+              } )
+            } );
+
+            if ( postResponse.ok ) {
+              debug( `✅ Success: POST method updated code as used (${ postResponse.status })` );
+              return;
+            } else {
+              debug( `POST update failed with status ${ postResponse.status }` );
+            }
+          } catch ( postErr ) {
+            debug( `POST error: ${ postErr.message }` );
+          }
+
+          debug( `⚠️ Warning: All update methods failed, but continuing with unlock` );
+        } catch ( err ) {
+          debug( `❌ Update error: ${ err.message }` );
         }
       }
 
