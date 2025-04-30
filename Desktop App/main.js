@@ -11,16 +11,168 @@ const url = require("url");
 const os = require("os");
 const { createClient } = require("@supabase/supabase-js");
 
+// For Windows auto-start functionality
+const { execSync } = require("child_process");
+const fs = require("fs");
+
 // Supabase configuration
 const SUPABASE_URL = "https://cecxwuddkezuvjfqriwm.supabase.co";
 const SUPABASE_KEY =
 	"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlY3h3dWRka2V6dXZqZnFyaXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYwMDgxNDgsImV4cCI6MjA2MTU4NDE0OH0._cYVO7QoNn7vZXLuCE1yZPPSwFD1hxHyJINYfBUuZzY";
+
+// App name for registry
+const APP_NAME = "CafeKioskLock";
 
 // Initialize Supabase client
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Get the hostname (machine ID)
 const hostname = os.hostname();
+
+// Function to register or update machine in Supabase
+async function registerMachine() {
+	try {
+		console.log(`Checking registration for machine: ${hostname}`);
+
+		// Get machine metadata
+		const metadata = {
+			platform: os.platform(),
+			version: os.version(),
+			type: os.type(),
+			arch: os.arch(),
+			release: os.release(),
+			totalMemory: os.totalmem(),
+			cpus: os.cpus().length,
+			userInfo: os.userInfo().username,
+		};
+
+		// Current timestamp
+		const now = new Date().toISOString();
+
+		// Check if machine exists in database
+		const { data, error } = await supabase
+			.from("machines")
+			.select("*")
+			.eq("machine_id", hostname)
+			.maybeSingle();
+
+		if (error) {
+			console.error("Error checking machine registration:", error);
+			return;
+		}
+
+		if (!data) {
+			// Machine doesn't exist, register it
+			console.log("Machine not registered. Registering now...");
+
+			const { error: insertError } = await supabase.from("machines").insert([
+				{
+					machine_id: hostname,
+					registered_at: now,
+					last_seen_at: now,
+					metadata: metadata,
+				},
+			]);
+
+			if (insertError) {
+				console.error("Error registering machine:", insertError);
+			} else {
+				console.log("Machine registered successfully!");
+			}
+		} else {
+			// Machine exists, update last_seen_at and metadata
+			console.log("Machine already registered. Updating last_seen_at...");
+
+			const { error: updateError } = await supabase
+				.from("machines")
+				.update({
+					last_seen_at: now,
+					metadata: metadata,
+				})
+				.eq("machine_id", hostname);
+
+			if (updateError) {
+				console.error("Error updating machine info:", updateError);
+			} else {
+				console.log("Machine info updated successfully!");
+			}
+		}
+	} catch (err) {
+		console.error("Machine registration error:", err);
+	}
+}
+
+// Function to enable auto-start on Windows
+function setupAutoLaunch() {
+	if (process.platform === "win32") {
+		try {
+			console.log("Setting up auto-launch on Windows...");
+
+			// Get current executable path
+			const exePath = process.execPath;
+			console.log(`Executable path: ${exePath}`);
+
+			// Escape backslashes for registry
+			const escapedPath = exePath.replace(/\\/g, "\\\\");
+
+			// Create a registry command to add the app to auto-start
+			const regCommand = `reg add "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "${APP_NAME}" /t REG_SZ /d "${escapedPath}" /f`;
+
+			// Execute the registry command
+			execSync(regCommand);
+
+			console.log("Auto-launch setup successful!");
+		} catch (error) {
+			console.error("Error setting up auto-launch:", error);
+		}
+	} else {
+		console.log("Auto-launch setup is only supported on Windows.");
+	}
+}
+
+// Function to create a startup shortcut (alternative method)
+function createStartupShortcut() {
+	if (process.platform === "win32") {
+		try {
+			console.log("Creating startup shortcut...");
+
+			// Get appdata path
+			const startupPath = path.join(
+				process.env.APPDATA,
+				"\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
+			);
+			const shortcutPath = path.join(startupPath, `${APP_NAME}.lnk`);
+
+			// Only create if it doesn't exist
+			if (!fs.existsSync(shortcutPath)) {
+				// Create Windows shortcut using PowerShell
+				const exePath = process.execPath;
+				const psScript = `
+					$WshShell = New-Object -comObject WScript.Shell
+					$Shortcut = $WshShell.CreateShortcut("${shortcutPath}")
+					$Shortcut.TargetPath = "${exePath}"
+					$Shortcut.Save()
+				`;
+
+				// Write PowerShell script to temp file
+				const tempFile = path.join(app.getPath("temp"), "create-shortcut.ps1");
+				fs.writeFileSync(tempFile, psScript);
+
+				// Execute PowerShell script
+				execSync(`powershell -ExecutionPolicy Bypass -File "${tempFile}"`);
+
+				// Clean up
+				fs.unlinkSync(tempFile);
+
+				console.log("Startup shortcut created successfully!");
+			} else {
+				console.log("Startup shortcut already exists.");
+			}
+		} catch (error) {
+			console.error("Error creating startup shortcut:", error);
+		}
+	}
+}
 
 // Prevent multiple instances of the app
 const gotTheLock = app.requestSingleInstanceLock();
@@ -81,7 +233,18 @@ function createWindow() {
 }
 
 // Create window when Electron has finished initialization
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+	// Register machine with Supabase
+	await registerMachine();
+
+	// Set up auto-launch on Windows
+	if (app.isPackaged) {
+		// Only set up auto-launch in production, not during development
+		setupAutoLaunch();
+		// Create shortcut as a backup method
+		createStartupShortcut();
+	}
+
 	createWindow();
 
 	// Register global shortcuts to prevent common ways to exit kiosk mode

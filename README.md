@@ -9,13 +9,15 @@ This repository contains a comprehensive solution for cafe management, including
 An Electron.js desktop application that acts as a kiosk-style lock screen to secure cafe computers.
 
 - **Location**: `./Desktop App/`
-- **Status**: Phase 2 completed - Lock screen with code validation
+- **Status**: Phase 3 completed - Lock screen with code validation, machine registration, and auto-start
 - **Features**:
   - Fullscreen kiosk mode
   - Prevention of closure via keyboard shortcuts
   - Simple lock screen UI
   - Code validation using Supabase
   - Machine-specific unlock codes with expiration
+  - Auto-start on Windows boot
+  - Machine self-registration in Supabase database
 
 ### Future Components
 
@@ -39,7 +41,7 @@ Each component has its own README with specific instructions for installation an
 
 ## Database Structure
 
-The application uses a Supabase database with the following structure:
+The application uses a Supabase database with the following tables:
 
 ### lock_codes Table
 
@@ -51,6 +53,16 @@ The application uses a Supabase database with the following structure:
 | created_at | timestamp | When the code was created                       |
 | expires_at | timestamp | When the code expires                           |
 | used       | boolean   | Whether the code has been used (default: false) |
+
+### machines Table
+
+| Column        | Type      | Description                            |
+| ------------- | --------- | -------------------------------------- |
+| id            | uuid      | Primary key                            |
+| machine_id    | string    | Computer hostname (unique identifier)  |
+| registered_at | timestamp | When the machine was first registered  |
+| last_seen_at  | timestamp | Last time the machine launched the app |
+| metadata      | jsonb     | System information (OS, specs, etc.)   |
 
 ## Features
 
