@@ -260,21 +260,6 @@
 
         try {
           debug( `Attempting to validate code: "${ code }"` );
-          debug( `Code entered matches "123456" from Supabase: ${ code === "123456" ? "✅ YES" : "❌ NO" }` );
-
-          // For direct unlock testing
-          if ( code === "123456" && ( !window.api || !window.api.validateCode ) ) {
-            debug( `Using emergency direct unlock path since API is unavailable` );
-            showSuccess( "Emergency unlock approved" );
-            setTimeout( () => {
-              try {
-                window.close();
-              } catch ( err ) {
-                debug( `❌ ERROR closing window: ${ err.message }` );
-              }
-            }, 1500 );
-            return;
-          }
 
           // Normal path - validate through API
           if ( !window.api || !window.api.validateCode ) {
@@ -311,21 +296,8 @@
           }
         } catch ( error ) {
           debug( `⚠️ ERROR: ${ error.message || 'Unknown error' }` );
-
-          // Special case for the key in the screenshot
-          if ( code === "123456" ) {
-            debug( `Using emergency direct unlock for "123456" due to error` );
-            showSuccess( "Emergency unlock approved" );
-            setTimeout( () => {
-              try {
-                window.close();
-              } catch ( err ) {
-                debug( `❌ ERROR closing window: ${ err.message }` );
-              }
-            }, 1500 );
-          } else {
-            showError( 'An error occurred. Please try again.' );
-          }
+          showError( 'An error occurred. Please try again.' );
+          codeInput.focus();
         } finally {
           setLoading( false );
         }

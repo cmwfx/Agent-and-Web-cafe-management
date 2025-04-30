@@ -50,13 +50,7 @@ try {
 		// Send validation request to main process
 		validateCode: (code) => {
 			try {
-				// For direct unlocking when debugging (hardcoded for testing)
-				if (code === "123456") {
-					console.log("Using direct unlock override for testing");
-					// Directly return a successful result for the specific code
-					return Promise.resolve({ valid: true, message: "Unlocking..." });
-				}
-
+				// Always validate through Supabase - no hardcoded values
 				return ipcRenderer.invoke("validate-code", code);
 			} catch (err) {
 				console.error("Error in validateCode:", err);

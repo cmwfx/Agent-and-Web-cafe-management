@@ -378,48 +378,6 @@ ipcMain.handle("validate-code", async (event, code) => {
 			}`
 		);
 
-		// Emergency/master code for debugging
-		if (code === "123456") {
-			console.log("DEBUG - Master code used");
-			// Attempt to update the record in Supabase
-			try {
-				const { data: lockCodes, error: fetchError } = await supabase
-					.from("lock_codes")
-					.select("*")
-					.eq("code", "123456")
-					.eq("machine_id", expectedMachineId)
-					.limit(1);
-
-				console.log("DEBUG - Lock codes query result:", {
-					lockCodes,
-					fetchError,
-				});
-
-				if (lockCodes && lockCodes.length > 0) {
-					// We found a matching record, now update it
-					const codeId = lockCodes[0].id;
-					console.log(`DEBUG - Found code ID ${codeId}, updating used flag...`);
-
-					const { data: updateData, error: updateError } = await supabase
-						.from("lock_codes")
-						.update({ used: true })
-						.eq("id", codeId);
-
-					console.log("DEBUG - Update result:", { updateData, updateError });
-
-					if (updateError) {
-						console.error("Failed to mark code as used:", updateError);
-					} else {
-						console.log("Successfully marked code as used");
-					}
-				}
-			} catch (updateErr) {
-				console.error("Error updating code status:", updateErr);
-			}
-
-			return { valid: true, message: "Master code accepted" };
-		}
-
 		// Regular emergency code
 		const emergencyCode = `EM-${actualHostname.substring(0, 4).toUpperCase()}`;
 		if (code === emergencyCode) {
@@ -450,7 +408,9 @@ ipcMain.handle("validate-code", async (event, code) => {
 			.select("*")
 			.eq("code", code)
 			.eq("machine_id", expectedMachineId) // Force this to use expected ID
-			.limit(10);
+			.eq("used", false) // Only use unused codes
+			.gt("expires_at", new Date().toISOString()) // Check expiration
+			.limit(1);
 
 		// DEBUG: Log the raw response
 		console.log("DEBUG - Supabase response:", {
@@ -471,10 +431,9 @@ ipcMain.handle("validate-code", async (event, code) => {
 			return { valid: false, message: "Invalid or expired code." };
 		}
 
-		// Find a valid code - ignoring used and expiry for debugging
-		const foundCode = data[0]; // Just use the first code found for now
-
-		console.log("DEBUG - Found code:", foundCode);
+		// Found a valid code
+		const foundCode = data[0];
+		console.log("DEBUG - Valid code found:", foundCode);
 
 		// Mark the code as used with a direct UPDATE query
 		const updateResult = await supabase
@@ -486,6 +445,7 @@ ipcMain.handle("validate-code", async (event, code) => {
 
 		if (updateResult.error) {
 			console.error("Error marking code as used:", updateResult.error);
+			// Continue anyway - we'll still unlock even if the update fails
 		} else {
 			console.log("Successfully marked code as used");
 		}
