@@ -1,0 +1,17 @@
+{
+	"name": "kiosk-lock-app",
+	"version": "1.0.0",
+	"main": "main.js",
+	"scripts": {
+		"start": "electron .",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"type": "commonjs",
+	"description": "A kiosk-style lock screen application",
+	"devDependencies": {
+		"electron": "^36.0.0"
+	}
+}

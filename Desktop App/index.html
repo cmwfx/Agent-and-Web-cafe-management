@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Locked Computer</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: #000;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+      user-select: none;
+      cursor: none;
+    }
+    .lock-container {
+      text-align: center;
+    }
+    .lock-icon {
+      font-size: 80px;
+      margin-bottom: 20px;
+    }
+    .lock-message {
+      font-size: 32px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="lock-container">
+    <div class="lock-icon">🔒</div>
+    <div class="lock-message">This computer is locked</div>
+  </div>
+
+  <script>
+    // Prevent right-click context menu
+    document.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      return false;
+    });
+
+    // Prevent keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      e.preventDefault();
+      return false;
+    });
+
+    // Prevent selecting text
+    document.addEventListener('selectstart', (e) => {
+      e.preventDefault();
+      return false;
+    });
+
+    // Prevent dragging
+    document.addEventListener('dragstart', (e) => {
+      e.preventDefault();
+      return false;
+    });
+  </script>
+</body>
+</html> 
