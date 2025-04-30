@@ -211,7 +211,8 @@
             method: "GET",
             headers: {
               "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlY3h3dWRka2V6dXZqZnFyaXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYwMDgxNDgsImV4cCI6MjA2MTU4NDE0OH0._cYVO7QoNn7vZXLuCE1yZPPSwFD1hxHyJINYfBUuZzY",
-              "Content-Type": "application/json"
+              "Content-Type": "application/json",
+              "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlY3h3dWRka2V6dXZqZnFyaXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYwMDgxNDgsImV4cCI6MjA2MTU4NDE0OH0._cYVO7QoNn7vZXLuCE1yZPPSwFD1hxHyJINYfBUuZzY"
             }
           } );
 
@@ -223,20 +224,35 @@
             const codeId = data[ 0 ].id;
             debug( `Valid code found with ID: ${ codeId }` );
 
-            // Mark as used
-            const updateResponse = await fetch( `https://cecxwuddkezuvjfqriwm.supabase.co/rest/v1/lock_codes?id=eq.${ codeId }`, {
-              method: "PATCH",
-              headers: {
-                "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlY3h3dWRka2V6dXZqZnFyaXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYwMDgxNDgsImV4cCI6MjA2MTU4NDE0OH0._cYVO7QoNn7vZXLuCE1yZPPSwFD1hxHyJINYfBUuZzY",
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal"
-              },
-              body: JSON.stringify( {
-                used: true
-              } )
-            } );
+            // Mark as used - using Supabase REST API
+            try {
+              const updateUrl = `https://cecxwuddkezuvjfqriwm.supabase.co/rest/v1/lock_codes?id=eq.${ codeId }`;
+              debug( `Sending update request to: ${ updateUrl }` );
 
-            debug( `Update response status: ${ updateResponse.status }` );
+              const updateResponse = await fetch( updateUrl, {
+                method: "PATCH",
+                headers: {
+                  "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlY3h3dWRka2V6dXZqZnFyaXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYwMDgxNDgsImV4cCI6MjA2MTU4NDE0OH0._cYVO7QoNn7vZXLuCE1yZPPSwFD1hxHyJINYfBUuZzY",
+                  "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlY3h3dWRka2V6dXZqZnFyaXdtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYwMDgxNDgsImV4cCI6MjA2MTU4NDE0OH0._cYVO7QoNn7vZXLuCE1yZPPSwFD1hxHyJINYfBUuZzY",
+                  "Content-Type": "application/json",
+                  "Prefer": "return=minimal"
+                },
+                body: JSON.stringify( {
+                  used: true
+                } )
+              } );
+
+              if ( updateResponse.ok ) {
+                debug( `✅ Successfully marked code as used. Status: ${ updateResponse.status }` );
+              } else {
+                const errorData = await updateResponse.text();
+                debug( `❌ Error marking code as used. Status: ${ updateResponse.status }, Response: ${ errorData }` );
+              }
+            } catch ( updateErr ) {
+              debug( `❌ Exception updating code status: ${ updateErr.message }` );
+              // Continue with unlocking even if the update fails
+            }
+
             return { valid: true, message: "Unlocking..." };
           }
 

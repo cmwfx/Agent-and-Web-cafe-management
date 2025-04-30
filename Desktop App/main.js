@@ -459,18 +459,42 @@ ipcMain.handle("validate-code", async (event, code) => {
 		console.log("DEBUG - Valid code found:", foundCode);
 
 		// Mark the code as used with a direct UPDATE query
-		const updateResult = await supabase
-			.from("lock_codes")
-			.update({ used: true })
-			.eq("id", foundCode.id);
+		try {
+			console.log(`Updating code ${foundCode.id} to mark as used...`);
 
-		console.log("DEBUG - Update result:", updateResult);
+			const updateResult = await supabase
+				.from("lock_codes")
+				.update({ used: true })
+				.eq("id", foundCode.id);
 
-		if (updateResult.error) {
-			console.error("Error marking code as used:", updateResult.error);
+			console.log("DEBUG - Update result:", updateResult);
+
+			if (updateResult.error) {
+				console.error("Error marking code as used:", updateResult.error);
+				// Try an alternative update method
+				try {
+					console.log("Trying alternative update method...");
+					const altUpdateResult = await supabase
+						.from("lock_codes")
+						.update([{ used: true }])
+						.match({ id: foundCode.id });
+
+					console.log("Alternative update result:", altUpdateResult);
+
+					if (!altUpdateResult.error) {
+						console.log(
+							"Successfully marked code as used with alternative method"
+						);
+					}
+				} catch (altErr) {
+					console.error("Alternative update also failed:", altErr);
+				}
+			} else {
+				console.log("Successfully marked code as used");
+			}
+		} catch (updateErr) {
+			console.error("Exception in update operation:", updateErr);
 			// Continue anyway - we'll still unlock even if the update fails
-		} else {
-			console.log("Successfully marked code as used");
 		}
 
 		return { valid: true, message: "Unlocking..." };
