@@ -125,6 +125,30 @@
         transform: rotate(360deg);
       }
     }
+
+    /* DEBUG UI */
+    .debug-panel {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background-color: rgba(0, 0, 0, 0.8);
+      color: #00ff00;
+      font-family: monospace;
+      padding: 10px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 14px;
+      text-align: left;
+      z-index: 9999;
+      border-top: 2px solid #00ff00;
+    }
+
+    .debug-title {
+      font-weight: bold;
+      color: #ff9900;
+      margin-bottom: 5px;
+    }
   </style>
 </head>
 
@@ -144,11 +168,12 @@
     <div class="spinner" id="loadingSpinner"></div>
     <div class="error-message" id="errorMessage"></div>
     <div class="success-message" id="successMessage"></div>
+  </div>
 
-    <!-- Debug Info Display -->
-    <div id="debugInfo"
-      style="margin-top: 20px; text-align: left; color: #aaa; font-size: 12px; padding: 10px; background-color: rgba(0,0,0,0.3); border-radius: 4px; max-height: 150px; overflow-y: auto;">
-    </div>
+  <!-- Fixed Debug Panel -->
+  <div id="debugPanel" class="debug-panel">
+    <div class="debug-title">DEBUG INFORMATION</div>
+    <div id="debugContent"></div>
   </div>
 
   <script>
@@ -161,14 +186,34 @@
       const errorMessage = document.getElementById( 'errorMessage' );
       const successMessage = document.getElementById( 'successMessage' );
       const loadingSpinner = document.getElementById( 'loadingSpinner' );
-      const debugInfo = document.getElementById( 'debugInfo' );
+      const debugContent = document.getElementById( 'debugContent' );
 
-      // Display hostname
-      const hostname = await window.api.getHostname();
-      hostnameEl.textContent = `Computer ID: ${ hostname }`;
+      // Debug function
+      function debug ( message ) {
+        const timestamp = new Date().toLocaleTimeString();
+        const entry = document.createElement( 'div' );
+        entry.innerHTML = `[${ timestamp }] ${ message }`;
+        debugContent.appendChild( entry );
+        console.log( `[DEBUG] ${ message }` );
+      }
 
-      // Debug info
-      debugInfo.innerHTML = `<strong>Debug Info:</strong><br>Hostname: ${ hostname }`;
+      // Display initial debug info
+      try {
+        const hostname = await window.api.getHostname();
+        hostnameEl.textContent = `Computer ID: ${ hostname }`;
+
+        // Log initial debug info
+        debug( `<strong>App Started</strong>` );
+        debug( `Hostname: "${ hostname }"` );
+        debug( `Expected ID in Supabase: "EC2AMAZ-21ASGA3"` );
+        debug( `Match: ${ hostname === "EC2AMAZ-21ASGA3" ? "✅ YES" : "❌ NO - CASE MISMATCH" }` );
+
+        if ( hostname !== "EC2AMAZ-21ASGA3" ) {
+          debug( `⚠️ HOSTNAME MISMATCH! The database expects "EC2AMAZ-21ASGA3" but found "${ hostname }"` );
+        }
+      } catch ( err ) {
+        debug( `Error getting hostname: ${ err.message }` );
+      }
 
       // Focus the input field
       codeInput.focus();
@@ -198,18 +243,18 @@
         setLoading( true );
 
         try {
-          // Add to debug info
-          addDebugInfo( `Attempting to validate code: ${ code }` );
+          debug( `Attempting to validate code: "${ code }"` );
+          debug( `Code entered matches "123456" from Supabase: ${ code === "123456" ? "✅ YES" : "❌ NO" }` );
 
           // Call the validate code function from the preload script
           const result = await window.api.validateCode( code );
 
-          // Add validation result to debug info
-          addDebugInfo( `Validation result: ${ JSON.stringify( result ) }` );
+          debug( `Validation result: ${ JSON.stringify( result ) }` );
 
           if ( result.valid ) {
             // Code is valid
             showSuccess( result.message );
+            debug( `✅ SUCCESS: Code accepted. Unlocking...` );
 
             // Wait a moment to show the success message before exiting
             setTimeout( () => {
@@ -218,11 +263,12 @@
           } else {
             // Code is invalid
             showError( result.message );
+            debug( `❌ FAILED: ${ result.message }` );
             codeInput.value = '';
             codeInput.focus();
           }
         } catch ( error ) {
-          addDebugInfo( `Error: ${ error.message || 'Unknown error' }` );
+          debug( `⚠️ ERROR: ${ error.message || 'Unknown error' }` );
           showError( 'An error occurred. Please try again.' );
         } finally {
           setLoading( false );
@@ -246,13 +292,6 @@
         unlockBtn.disabled = isLoading;
         codeInput.disabled = isLoading;
         loadingSpinner.style.display = isLoading ? 'block' : 'none';
-      }
-
-      // Add debug info
-      function addDebugInfo ( message ) {
-        const timestamp = new Date().toLocaleTimeString();
-        debugInfo.innerHTML += `<br>[${ timestamp }] ${ message }`;
-        debugInfo.scrollTop = debugInfo.scrollHeight;
       }
     } );
 

@@ -5,13 +5,33 @@ const { contextBridge, ipcRenderer } = require("electron");
 const os = require("os");
 
 // Debug: Log the exact hostname
-console.log("Hostname is:", os.hostname());
+const hostname = os.hostname();
+console.log("Hostname is:", hostname);
+console.log("Expected Hostname for Supabase: EC2AMAZ-21ASGA3");
+console.log(
+	"Hostname match:",
+	hostname === "EC2AMAZ-21ASGA3" ? "YES" : "NO - CASE MISMATCH"
+);
+
+// Check for any whitespace or special characters
+console.log("Hostname length:", hostname.length);
+console.log("Hostname encoded:", encodeURIComponent(hostname));
+
+// For debugging, show character codes
+console.log(
+	"Hostname character codes:",
+	Array.from(hostname).map((char) => char.charCodeAt(0))
+);
+console.log(
+	"Expected ID character codes:",
+	Array.from("EC2AMAZ-21ASGA3").map((char) => char.charCodeAt(0))
+);
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld("api", {
 	// Get the hostname (machine ID)
-	getHostname: () => os.hostname(),
+	getHostname: () => hostname,
 
 	// Send validation request to main process
 	validateCode: (code) => ipcRenderer.invoke("validate-code", code),
