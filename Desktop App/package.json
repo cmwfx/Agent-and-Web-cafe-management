@@ -20,6 +20,7 @@
 	},
 	"dependencies": {
 		"@supabase/supabase-js": "^2.49.4",
+		"create-desktop-shortcuts": "^1.11.1",
 		"dotenv": "^16.5.0"
 	},
 	"build": {

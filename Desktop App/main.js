@@ -12,6 +12,14 @@ const os = require("os");
 const { createClient } = require("@supabase/supabase-js");
 const dotenv = require("dotenv");
 const fs = require("fs");
+const createShortcut = require("create-desktop-shortcuts");
+
+// Single-instance guard
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+	app.quit();
+	return;
+}
 
 // Function to load environment variables from multiple possible locations
 function loadEnvironmentVariables() {
@@ -69,8 +77,8 @@ const SUPABASE_KEY = process.env.SUPABASE_KEY;
 console.log(`SUPABASE_URL set: ${!!SUPABASE_URL}`);
 console.log(`SUPABASE_KEY set: ${!!SUPABASE_KEY}`);
 
-// App name for registry
-const APP_NAME = "CafeKioskLock";
+// App name for registry and shortcut
+const APP_NAME = "CafeConnect";
 
 // Initialize Supabase client with error handling
 let supabase;
@@ -191,11 +199,11 @@ async function registerMachine() {
 	}
 }
 
-// Function to enable auto-start on Windows
+// Function to enable auto-start on Windows (Registry method - fallback option)
 function setupAutoLaunch() {
 	if (process.platform === "win32") {
 		try {
-			console.log("Setting up auto-launch on Windows...");
+			console.log("Setting up auto-launch on Windows via registry...");
 
 			// Get current executable path
 			const exePath = process.execPath;
@@ -210,52 +218,78 @@ function setupAutoLaunch() {
 			// Execute the registry command
 			execSync(regCommand);
 
-			console.log("Auto-launch setup successful!");
+			console.log("Auto-launch setup successful via registry!");
 		} catch (error) {
-			console.error("Error setting up auto-launch:", error);
+			console.error("Error setting up auto-launch via registry:", error);
 		}
 	} else {
 		console.log("Auto-launch setup is only supported on Windows.");
 	}
 }
 
-// Function to create a startup shortcut (alternative method)
-function createStartupShortcut() {
+// Function to check if startup shortcut exists
+function startupShortcutExists() {
 	if (process.platform === "win32") {
 		try {
-			console.log("Creating startup shortcut...");
-
 			// Get appdata path
 			const startupPath = path.join(
 				process.env.APPDATA,
-				"\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
+				"Microsoft\\Windows\\Start Menu\\Programs\\Startup"
 			);
 			const shortcutPath = path.join(startupPath, `${APP_NAME}.lnk`);
 
-			// Only create if it doesn't exist
-			if (!fs.existsSync(shortcutPath)) {
-				// Create Windows shortcut using PowerShell
-				const exePath = process.execPath;
-				const psScript = `
-					$WshShell = New-Object -comObject WScript.Shell
-					$Shortcut = $WshShell.CreateShortcut("${shortcutPath}")
-					$Shortcut.TargetPath = "${exePath}"
-					$Shortcut.Save()
-				`;
+			// Check if shortcut exists
+			return fs.existsSync(shortcutPath);
+		} catch (error) {
+			console.error("Error checking for startup shortcut:", error);
+			return false;
+		}
+	}
+	return false;
+}
 
-				// Write PowerShell script to temp file
-				const tempFile = path.join(app.getPath("temp"), "create-shortcut.ps1");
-				fs.writeFileSync(tempFile, psScript);
+// Function to get the startup shortcut path
+function getStartupShortcutPath() {
+	return path.join(
+		process.env.APPDATA,
+		"Microsoft\\Windows\\Start Menu\\Programs\\Startup",
+		`${APP_NAME}.lnk`
+	);
+}
 
-				// Execute PowerShell script
-				execSync(`powershell -ExecutionPolicy Bypass -File "${tempFile}"`);
+// Function to create a startup shortcut using create-desktop-shortcuts package
+function createStartupShortcut() {
+	if (process.platform === "win32") {
+		try {
+			// Check if the shortcut already exists
+			const shortcutPath = getStartupShortcutPath();
 
-				// Clean up
-				fs.unlinkSync(tempFile);
+			if (startupShortcutExists()) {
+				console.log("🔄 Auto-start shortcut already present:", shortcutPath);
+				return;
+			}
 
-				console.log("Startup shortcut created successfully!");
+			console.log("Creating startup shortcut...");
+
+			// Create shortcut using the package
+			const success = createShortcut({
+				windows: {
+					filePath: process.execPath,
+					outputPath: path.join(
+						process.env.APPDATA,
+						"Microsoft\\Windows\\Start Menu\\Programs\\Startup"
+					),
+					name: APP_NAME,
+					comment: "CafeConnect Kiosk Application",
+					icon: process.execPath,
+					windowMode: "normal",
+				},
+			});
+
+			if (success) {
+				console.log("🔄 Auto-start shortcut created:", shortcutPath);
 			} else {
-				console.log("Startup shortcut already exists.");
+				console.error("Failed to create startup shortcut");
 			}
 		} catch (error) {
 			console.error("Error creating startup shortcut:", error);
@@ -263,12 +297,60 @@ function createStartupShortcut() {
 	}
 }
 
-// Prevent multiple instances of the app
-const gotTheLock = app.requestSingleInstanceLock();
+// Function to remove startup shortcut
+function removeStartupShortcut() {
+	if (process.platform === "win32") {
+		try {
+			const shortcutPath = getStartupShortcutPath();
+			if (fs.existsSync(shortcutPath)) {
+				fs.unlinkSync(shortcutPath);
+				console.log("Auto-start shortcut removed:", shortcutPath);
+				return true;
+			} else {
+				console.log("No auto-start shortcut found to remove");
+				return false;
+			}
+		} catch (error) {
+			console.error("Error removing startup shortcut:", error);
+			return false;
+		}
+	}
+	return false;
+}
 
-if (!gotTheLock) {
-	app.quit();
-	return;
+// Function to remove registry auto-start entry
+function removeRegistryAutoStart() {
+	if (process.platform === "win32") {
+		try {
+			// Create a registry command to remove the app from auto-start
+			const regCommand = `reg delete "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "${APP_NAME}" /f`;
+
+			// Execute the registry command
+			execSync(regCommand);
+			console.log("Registry auto-start entry removed");
+			return true;
+		} catch (error) {
+			console.error("Error removing registry auto-start:", error);
+			return false;
+		}
+	}
+	return false;
+}
+
+// Check for uninstall command line flag
+function checkForUninstallFlag() {
+	if (process.argv.includes("--uninstall-startup")) {
+		console.log("Uninstall flag detected, removing auto-start entries...");
+		let shortcutRemoved = removeStartupShortcut();
+		let registryRemoved = removeRegistryAutoStart();
+
+		console.log(
+			`Auto-start removal completed. Shortcut: ${shortcutRemoved}, Registry: ${registryRemoved}`
+		);
+		app.quit();
+		return true;
+	}
+	return false;
 }
 
 // Keep a global reference of the window object to prevent garbage collection
@@ -346,15 +428,23 @@ function createWindow() {
 
 // Create window when Electron has finished initialization
 app.whenReady().then(async () => {
+	// Check for uninstall flag before starting the app
+	if (checkForUninstallFlag()) {
+		return;
+	}
+
 	// Register machine with Supabase
 	await registerMachine();
 
-	// Set up auto-launch on Windows
+	// Set up auto-launch on Windows - only in packaged app
 	if (app.isPackaged) {
-		// Only set up auto-launch in production, not during development
-		setupAutoLaunch();
-		// Create shortcut as a backup method
+		// Primary method: Create startup shortcut
 		createStartupShortcut();
+
+		// Fallback method: Registry auto-start
+		if (!startupShortcutExists()) {
+			setupAutoLaunch();
+		}
 	}
 
 	createWindow();

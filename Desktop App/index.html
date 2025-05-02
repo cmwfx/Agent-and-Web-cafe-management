@@ -442,7 +442,7 @@
             setTimeout( () => {
               try {
                 if ( window.api && window.api.exitApp ) {
-                  window.api.exitApp();
+              window.api.exitApp();
                 } else {
                   debug( `❌ No exitApp function available, trying window.close()` );
                   window.close();
