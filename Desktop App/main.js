@@ -237,35 +237,83 @@ function startupShortcutExists() {
 	return false;
 }
 
+// Utility function to create Windows shortcuts directly without relying on the package
+function createWindowsShortcutDirectly(
+	targetPath,
+	shortcutPath,
+	description = ""
+) {
+	if (process.platform !== "win32") {
+		return false;
+	}
+
+	try {
+		console.log(`Creating shortcut directly: ${shortcutPath} -> ${targetPath}`);
+
+		// Create a VBS script that will create the shortcut
+		const vbsContent = `
+			Set oWS = WScript.CreateObject("WScript.Shell")
+			sLinkFile = "${shortcutPath.replace(/\\/g, "\\\\")}"
+			Set oLink = oWS.CreateShortcut(sLinkFile)
+			oLink.TargetPath = "${targetPath.replace(/\\/g, "\\\\")}"
+			oLink.Description = "${description}"
+			oLink.Save
+		`;
+
+		// Write this script to a temporary file
+		const tempDir = app.getPath("temp");
+		const tempVbsPath = path.join(tempDir, `create-shortcut-${Date.now()}.vbs`);
+		fs.writeFileSync(tempVbsPath, vbsContent);
+
+		// Execute the script
+		console.log(`Executing VBS script: ${tempVbsPath}`);
+		const result = execSync(`wscript "${tempVbsPath}"`);
+
+		// Clean up
+		fs.unlinkSync(tempVbsPath);
+
+		// Verify shortcut exists
+		const success = fs.existsSync(shortcutPath);
+		console.log(`Shortcut created: ${success ? "Yes" : "No"}`);
+
+		return success;
+	} catch (error) {
+		console.error("Error creating shortcut directly:", error);
+		return false;
+	}
+}
+
 // Function to enable auto-start on Windows (Registry method)
 function setupAutoLaunch() {
-	if (process.platform === "win32") {
-		try {
-			console.log("Setting up auto-launch on Windows via registry...");
+	try {
+		console.log("Setting up auto-launch...");
 
-			// Get current executable path
-			const exePath = process.execPath;
-			console.log(`Executable path: ${exePath}`);
+		// 1st try: Use create-desktop-shortcuts package
+		let success = createStartupShortcut();
 
-			// Escape backslashes for registry
-			const escapedPath = exePath.replace(/\\/g, "\\\\");
-
-			// Create a registry command to add the app to auto-start
-			const regCommand = `reg add "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "${APP_NAME}" /t REG_SZ /d "${escapedPath}" /f`;
-			console.log(`Registry command: ${regCommand}`);
-
-			// Execute the registry command
-			const result = execSync(regCommand).toString();
-			console.log(`Registry command result: ${result}`);
-
-			console.log("Auto-launch setup successful via registry!");
+		if (success) {
+			console.log("Successfully set up auto-launch via shortcut");
 			return true;
-		} catch (error) {
-			console.error("Error setting up auto-launch via registry:", error);
-			return false;
 		}
-	} else {
-		console.log("Auto-launch setup is only supported on Windows.");
+
+		// 2nd try: Direct shortcut creation as last resort
+		console.log("Attempting direct shortcut creation as a fallback...");
+		const shortcutPath = getStartupShortcutPath();
+		success = createWindowsShortcutDirectly(
+			process.execPath,
+			shortcutPath,
+			"CafeConnect Kiosk Application"
+		);
+
+		if (success) {
+			console.log("Successfully created startup shortcut directly");
+			return true;
+		}
+
+		console.error("Failed to set up auto-launch via all methods");
+		return false;
+	} catch (error) {
+		console.error("Error setting up auto-launch:", error);
 		return false;
 	}
 }
@@ -295,6 +343,42 @@ function createStartupShortcut() {
 				fs.mkdirSync(startupFolder, { recursive: true });
 			}
 
+			// Check for VBS script location - handle both packaged and development environments
+			let vbsScriptPath;
+
+			// Default path in node_modules
+			const defaultVbsPath = path.join(
+				__dirname,
+				"node_modules",
+				"create-desktop-shortcuts",
+				"src",
+				"windows.vbs"
+			);
+
+			// Path when app is packaged and the module is unpacked
+			const unpackedVbsPath = path.join(
+				app.isPackaged ? path.dirname(process.execPath) : __dirname,
+				"resources",
+				"app.asar.unpacked",
+				"node_modules",
+				"create-desktop-shortcuts",
+				"src",
+				"windows.vbs"
+			);
+
+			console.log(`Checking for VBS at default path: ${defaultVbsPath}`);
+			console.log(`Checking for VBS at unpacked path: ${unpackedVbsPath}`);
+
+			if (fs.existsSync(defaultVbsPath)) {
+				vbsScriptPath = defaultVbsPath;
+				console.log(`Using VBS script from: ${vbsScriptPath}`);
+			} else if (fs.existsSync(unpackedVbsPath)) {
+				vbsScriptPath = unpackedVbsPath;
+				console.log(`Using VBS script from unpacked: ${vbsScriptPath}`);
+			} else {
+				console.warn("Could not find windows.vbs script in expected locations");
+			}
+
 			// Create shortcut using the package
 			const options = {
 				windows: {
@@ -308,6 +392,8 @@ function createStartupShortcut() {
 					windowMode: "normal",
 					// Arguments to pass to the executable
 					arguments: "",
+					// Explicitly set VBS script path if found
+					...(vbsScriptPath && { VBScriptPath: vbsScriptPath }),
 				},
 			};
 
