@@ -603,20 +603,7 @@ app.whenReady().then(async () => {
 	// Register machine with Supabase
 	await registerMachine();
 
-	// Set up auto-launch on Windows - only in packaged app
-	if (app.isPackaged) {
-		console.log("Setting up auto-launch mechanisms...");
-
-		// Try both methods to ensure at least one works
-		const shortcutCreated = createStartupShortcut();
-		const registrySet = setupAutoLaunch();
-
-		console.log(
-			`Auto-launch setup results - Shortcut: ${shortcutCreated}, Registry: ${registrySet}`
-		);
-	} else {
-		console.log("Skipping auto-launch setup in development mode");
-	}
+	// Auto-start setup removed - will be manually added later
 
 	createWindow();
 
